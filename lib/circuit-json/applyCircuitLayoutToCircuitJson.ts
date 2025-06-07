@@ -95,11 +95,39 @@ export const applyCircuitLayoutToCircuitJson = (
       }
     }
 
-    // TODO Change schematic_component.symbol_name for passives to match the
-    // correct orientation. e.g. "boxresistor_down" -> "boxresistor_right"
-    // The direction "up", "down", "left", "right" can be determined by the
-    // relative position of pin1 and pin2, if pin1 is above pin2 the direction is
-    // "down", if pin1 is to the left of pin2 the direction is "right"
+    // Change schematic_component.symbol_name for passives to match the
+    // correct orientation based on pin positions
+    if (layoutChip.isPassive && schematicComponent.symbol_name) {
+      // Find pin1 and pin2 positions
+      const pin1Port = schematicPorts.find(p => p.pin_number === 1 || p.true_ccw_index === 0)
+      const pin2Port = schematicPorts.find(p => p.pin_number === 2 || p.true_ccw_index === 1)
+      
+      if (pin1Port?.center && pin2Port?.center) {
+        const dx = pin2Port.center.x - pin1Port.center.x
+        const dy = pin2Port.center.y - pin1Port.center.y
+        
+        // Determine orientation based on relative positions
+        // If pin1 is above pin2 (dy > 0), orientation is "down"
+        // If pin1 is below pin2 (dy < 0), orientation is "up"
+        // If pin1 is left of pin2 (dx > 0), orientation is "right"
+        // If pin1 is right of pin2 (dx < 0), orientation is "left"
+        let newOrientation: string
+        
+        if (Math.abs(dy) > Math.abs(dx)) {
+          // Vertical orientation
+          newOrientation = dy > 0 ? "down" : "up"
+        } else {
+          // Horizontal orientation
+          newOrientation = dx > 0 ? "right" : "left"
+        }
+        
+        // Update symbol_name if it's a resistor
+        if (schematicComponent.symbol_name.includes("boxresistor")) {
+          schematicComponent.symbol_name = `boxresistor_${newOrientation}`
+        }
+        // Could extend this for other passive types like capacitors, inductors
+      }
+    }
   }
 
   // const netIndexToLayoutNetId = new Map<number, string>()

@@ -1,6 +1,8 @@
 import type { CircuitBuilder } from "lib/builder"
 import type { InputNetlist } from "lib/input-types"
 import { detectPassiveOrientation } from "./detectPassiveOrientation"
+import { getMatchedBoxes } from "lib/matching/getMatchedBoxes"
+import { normalizeNetlist } from "lib/scoring/normalizeNetlist"
 
 /**
  * Transforms the target netlist to be compatible with the template's passive structures.
@@ -20,17 +22,37 @@ export function transformTargetForPassiveCompatibility(
     })),
   }
 
-  // Find passive components in both template and target
+  // Get proper box matching between template and target
+  const currentNetlist = template.getNetlist()
+  const normalizedTemplateResult = normalizeNetlist(currentNetlist)
+  const normalizedTargetResult = normalizeNetlist(target)
+  const normalizedTemplate = normalizedTemplateResult.normalizedNetlist
+  const normalizedTarget = normalizedTargetResult.normalizedNetlist
+
+  const matchedBoxes = getMatchedBoxes({
+    candidateNetlist: normalizedTemplate,
+    targetNetlist: normalizedTarget,
+  })
+
+  // Find passive components in template
   const templatePassives = template.chips.filter((chip) => chip.isPassive)
 
   for (const templatePassive of templatePassives) {
-    // GARBAGE!!!! NEVER MATCH TEMPLATE AND TARGET BY CHIP ID!!!!!!
-    // The chip ids are totally arbitrary, you must use normalization or box
-    // matching!
-    const targetBox = transformedTarget.boxes.find(
-      (box) => box.boxId === templatePassive.chipId,
-    )
-    if (!targetBox) continue // Skip if passive doesn't exist in target
+    // Find the box index for this template passive
+    const templateBoxIndex = normalizedTemplateResult.transform.boxIdToBoxIndex[templatePassive.chipId]
+    if (templateBoxIndex === undefined) continue
+
+    // Find the matched target box
+    const match = matchedBoxes.find(m => m.candidateBoxIndex === templateBoxIndex)
+    if (!match) continue // No matching box in target
+
+    // Get the target box ID from the match
+    const targetBoxId = Object.entries(normalizedTargetResult.transform.boxIdToBoxIndex)
+      .find(([_, boxIndex]) => boxIndex === match.targetBoxIndex)?.[0]
+    if (!targetBoxId) continue
+
+    const targetBox = transformedTarget.boxes.find(box => box.boxId === targetBoxId)
+    if (!targetBox) continue
 
     try {
       const templateOrientation = detectPassiveOrientation(templatePassive)
